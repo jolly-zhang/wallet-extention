@@ -297,7 +297,7 @@ export const AccountManager = () => {
                 
                 {currentAccount?.address === account.address && (
                   <div className="ml-4">
-                    <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                    <span className="text-xs bg-[rgb(184,247,3)] text-[rgb(45,46,55)] px-2 py-1 rounded">
                       当前账户
                     </span>
                   </div>

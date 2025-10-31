@@ -93,10 +93,10 @@ export default {
 				},
 				'pulse-glow': {
 					'0%': {
-						boxShadow: '0 0 20px hsl(263 77% 66% / 0.3)'
+						boxShadow: '0 0 20px rgb(184 247 3 / 0.3)'
 					},
 					'100%': {
-						boxShadow: '0 0 40px hsl(263 77% 66% / 0.6)'
+						boxShadow: '0 0 40px rgb(184 247 3 / 0.6)'
 					}
 				},
 				'fade-in': {

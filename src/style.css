@@ -13,7 +13,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 263 77% 66%;
+    --primary: 70 97% 49%;
     --primary-foreground: 0 0% 98%;
 
     --secondary: 240 4% 16%;
@@ -30,7 +30,7 @@
 
     --border: 240 4% 16%;
     --input: 240 4% 16%;
-    --ring: 263 77% 66%;
+    --ring: 70 97% 49%;
 
     --radius: 0.5rem;
 
@@ -51,9 +51,9 @@
     --sidebar-ring: 217.2 91.2% 59.8%;
 
     /* Wallet specific colors */
-    --wallet-gradient: linear-gradient(135deg, hsl(263 77% 66%), hsl(225 100% 71%));
-    --wallet-glow: 0 0 30px hsl(263 77% 66% / 0.3);
-    --wallet-accent: 225 100% 71%;
+    --wallet-gradient: linear-gradient(135deg, rgb(184,247,3), rgb(184,247,3));
+    --wallet-glow: 0 0 30px rgb(184 247 3 / 0.3);
+    --wallet-accent: 70 97% 49%;
     --wallet-success: 142 76% 36%;
     --wallet-warning: 48 96% 53%;
     --wallet-error: 0 84% 60%;

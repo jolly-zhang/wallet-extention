@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useWalletStore } from '@/stores/walletStore';
 import { Check, Copy, Eye, EyeOff, Import, Key, Wallet } from 'lucide-react';
 import React, { useState } from 'react';
+import logoImage from '../../static/logo.png';
 
 export const WalletSetup = () => {
   const [password, setPassword] = useState('');
@@ -147,15 +148,13 @@ export const WalletSetup = () => {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-wallet-gradient rounded-full flex items-center justify-center mx-auto mb-4 shadow-wallet-glow">
-            <Wallet className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 bg-[rgb(44,46,55)] rounded-full flex items-center justify-center mx-auto mb-4 shadow-wallet-glow">
+            {/* <Wallet className="w-8 h-8 text-white" /> */}
+            <img src={logoImage} alt="MetaNodeWallet" className="w-[46px] h-[46px]" />
           </div>
-          <h1 className="text-3xl font-bold bg-wallet-gradient bg-clip-text text-transparent">
-            MyWallet
+          <h1 className="text-3xl font-bold bg-[rgb(184,247,3)] bg-clip-text text-transparent">
+            MetaNodeWallet
           </h1>
-          <p className="text-muted-foreground mt-2">
-            安全的以太坊钱包
-          </p>
         </div>
 
         <Tabs defaultValue="create" className="w-full">
@@ -243,7 +242,7 @@ export const WalletSetup = () => {
 
                 <Button 
                   onClick={handleCreateWallet} 
-                  className="w-full bg-wallet-gradient hover:opacity-90"
+                  className="w-full bg-[rgb(44,46,55)] hover:opacity-90"
                   disabled={isLoading || !password || !confirmPassword}
                 >
                   {isLoading ? "创建中..." : "创建钱包"}

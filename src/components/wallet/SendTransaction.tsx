@@ -383,12 +383,12 @@ export const SendTransaction = () => {
               </div>
             </div>
 
-            <div className="bg-muted p-3 rounded-lg">
+            {/* <div className="bg-muted p-3 rounded-lg">
               <div className="flex justify-between text-sm">
                 <span>预估手续费:</span>
                 <span>{estimateGasFee()} {currentNetwork.symbol}</span>
               </div>
-            </div>
+            </div> */}
 
             <Button 
               onClick={handleSend} 
@@ -412,7 +412,7 @@ export const SendTransaction = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="bg-muted p-4 rounded-lg space-y-2">
+            <div className="bg-[rgb(45,46,55)] p-4 rounded-lg space-y-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">从:</span>
                 <span className="font-mono text-sm">

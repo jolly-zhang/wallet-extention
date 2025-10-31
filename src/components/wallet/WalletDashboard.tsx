@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { useWalletStore } from '@/stores/walletStore';
+import logoImage from '@/static/logo.png';
 import {
   Check,
   Coins,
@@ -61,12 +62,13 @@ export const WalletDashboard = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-wallet-gradient rounded-full flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-[rgb(44,46,55)] rounded-full flex items-center justify-center">
+              {/* <Wallet className="w-5 h-5 text-white" /> */}
+              <img src={logoImage} alt="MetaNodeWallet" className="w-[36px] h-[36px]" />
             </div>
             <div>
               <h1 className="text-2xl font-bold bg-wallet-gradient bg-clip-text text-transparent">
-                MyWallet
+                MetaNodeWallet
               </h1>
               <p className="text-sm text-muted-foreground">
                 {currentAccount.name}
@@ -84,7 +86,7 @@ export const WalletDashboard = () => {
         </div>
 
         {/* Navigation */}
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="flex gap-1 justify-between rounded-md bg-[rgb(45,46,55)] overflow-x-hidden">
           <Button
             variant={activeTab === 'overview' ? 'default' : 'ghost'}
             size="sm"
@@ -132,27 +134,27 @@ export const WalletDashboard = () => {
             <Card className="bg-wallet-gradient">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="text-white/80 text-sm">当前账户</div>
-                  <Badge variant="secondary" className="bg-white/20 text-white border-white/20">
+                  <div className="text-[rgb(45,46,55)] text-sm">当前账户</div>
+                  <Badge variant="secondary" className="bg-white/20 text-[rgba(45,46,55,0.5)] border-white/20">
                     {currentNetwork.name}
                   </Badge>
                 </div>
                 
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="text-2xl font-bold text-white">
+                  <div className="text-2xl font-bold text-[rgb(45,46,55)]">
                     {currentAccount.name}
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={copyAddress}
-                    className="text-white/80 hover:text-white hover:bg-white/10"
+                    className="text-[rgb(45,46,55)] hover:text-[rgb(45,46,55)] hover:bg-[rgb(184,247,3)]"
                   >
                     {copiedAddress ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </Button>
                 </div>
 
-                <div className="text-white/60 text-sm font-mono">
+                <div className="text-[rgb(45,46,55)] text-sm font-mono">
                   {formatAddress(currentAccount.address)}
                 </div>
               </CardContent>
