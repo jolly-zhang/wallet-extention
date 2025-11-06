@@ -1,3 +1,27 @@
+/**
+ * 钱包状态管理 Store
+ * 
+ * 基于 Zustand 实现的以太坊钱包状态管理，提供完整的钱包生命周期管理功能。
+ * 使用 Chrome Extension 的 storage.local API 进行数据持久化存储。
+ * 
+ * 主要功能模块：
+ * 1. 钱包管理：创建钱包、导入钱包（助记词/私钥）、解锁/锁定钱包
+ * 2. 账户管理：创建账户、切换账户、更新账户名称
+ * 3. 网络管理：添加自定义网络、切换网络
+ * 4. 代币管理：添加/删除代币、更新代币余额
+ * 5. DApp 集成：连接钱包、签名消息、断开连接
+ * 
+ * 安全特性：
+ * - 使用 AES 加密存储助记词和私钥
+ * - 使用 SHA256 哈希存储密码
+ * - 所有敏感数据在存储前均经过加密处理
+ * 
+ * 技术实现：
+ * - 使用 BIP39 标准生成和验证助记词
+ * - 使用 BIP44 路径 (m/44'/60'/0'/0/0) 派生账户
+ * - 使用 ethers.js 进行钱包操作和 RPC 交互
+ */
+
 import { type Network, type Token, type WalletAccount, type WalletState, DEFAULT_NETWORKS } from '@/types/wallet';
 import * as bip39 from 'bip39';
 import { AES, SHA256, enc } from 'crypto-js';
@@ -93,6 +117,7 @@ export const useWalletStore = create<WalletStore>()(
         return { mnemonic, account };
       },
 
+      // 通过助记词导入钱包
       importWallet: async (mnemonic: string, password: string) => {
         if (!bip39.validateMnemonic(mnemonic)) {
           throw new Error('Invalid mnemonic phrase');
