@@ -86,17 +86,17 @@ components/wallet/
 │                           # - 导入助记词
 │                           # - 导入私钥
 │
-├── WalletUnlock.tsx        # 钱包解锁组件
+├── WalletUnlock.tsx        # 钱包解锁组件，输密码解锁
 │                           # - 密码验证
 │                           # - 解锁界面
 │
-├── WalletDashboard.tsx     # 钱包主面板
+├── WalletDashboard.tsx     # 钱包主面板，总览，并切到下面几个页
 │                           # - 账户总览
 │                           # - 余额显示
 │                           # - 代币列表
 │                           # - 快捷操作
 │
-├── AccountManager.tsx      # 账户管理组件
+├── AccountManager.tsx      # 账户管理组件，创建账户、导入私钥、切换、改名
 │                           # - 创建账户
 │                           # - 切换账户
 │                           # - 重命名账户

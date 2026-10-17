@@ -22,7 +22,7 @@ export const WalletSetup = () => {
 
   const { createWallet, importWallet, importPrivateKey } = useWalletStore();
   const { toast } = useToast();
-
+  //创建钱包
   const handleCreateWallet = async () => {
     if (password !== confirmPassword) {
       toast({
@@ -45,6 +45,7 @@ export const WalletSetup = () => {
     setIsLoading(true);
     try {
       const { mnemonic: newMnemonic } = await createWallet(password);
+      console.log('newMnemonic', newMnemonic);
       setMnemonic(newMnemonic);
       toast({
         title: "钱包创建成功！",

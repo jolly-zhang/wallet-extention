@@ -8,7 +8,11 @@
 // import type { PlasmoCSConfig } from "plasmo";
 
 // export const config: PlasmoCSConfig = {
-//   matches: ["<all_urls>"]
+//   matches: ["<all_urls>"],
+//   //写上一个网址，就是不监听这个网址的脚本
+//   exclude_matches: ["<all_urls>"],
+//   // 设置脚本运行的世界，MAIN 表示在主进程运行，CONTENT_SCRIPT 表示在内容脚本运行 
+//   world: "MAIN",
 // }
 // console.log("message-bridge.ts 已经加载");
 

@@ -6,6 +6,7 @@ import { Toaster } from "./components/ui/toaster";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import "./style.css";
+import React from "react";
 
 const queryClient = new QueryClient({})
 export default function popup() {

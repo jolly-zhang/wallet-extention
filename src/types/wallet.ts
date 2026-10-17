@@ -1,10 +1,11 @@
+//钱包账户
 export interface WalletAccount {
   address: string;
   privateKey: string;
   name: string;
   index: number;
 }
-
+//钱包状态
 export interface WalletState {
   isLocked: boolean;
   isConnected: boolean;
@@ -16,7 +17,7 @@ export interface WalletState {
   networks: Network[];
   tokens: Token[];
 }
-
+//网络
 export interface Network {
   id: string;
   name: string;

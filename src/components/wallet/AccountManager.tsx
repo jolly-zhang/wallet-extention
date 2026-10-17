@@ -28,7 +28,7 @@ export const AccountManager = () => {
     isValidPassword
   } = useWalletStore();
   const { toast } = useToast();
-
+  // 创建账户
   const handleCreateAccount = async () => {
     if (!password) {
       toast({
@@ -49,7 +49,8 @@ export const AccountManager = () => {
     }
 
     try {
-      await createAccount(newAccountName || undefined);
+      console.log(password);
+      await createAccount(newAccountName || undefined,password);
       setIsCreateDialogOpen(false);
       setNewAccountName('');
       setPassword('');
@@ -64,7 +65,7 @@ export const AccountManager = () => {
       });
     }
   };
-
+  // 导入账户
   const handleImportAccount = async () => {
     if (!password) {
       toast({
@@ -110,11 +111,13 @@ export const AccountManager = () => {
     }
   };
 
+  // 编辑账户名称
   const handleEditName = (address: string, currentName: string) => {
     setEditingAccount(address);
     setEditName(currentName);
   };
 
+  // 保存编辑账户名称
   const handleSaveEdit = (address: string) => {
     if (editName.trim()) {
       updateAccountName(address, editName.trim());
@@ -126,11 +129,13 @@ export const AccountManager = () => {
     setEditName('');
   };
 
+  // 取消编辑账户名称
   const handleCancelEdit = () => {
     setEditingAccount(null);
     setEditName('');
   };
 
+  // 格式化地址
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
