@@ -1,21 +1,32 @@
 //钱包账户
 export interface WalletAccount {
   address: string;
-  privateKey: string;
-  name: string;
-  index: number;
+  privateKey: string;//私钥
+  name: string;//账户名称
+  index: number;//账户索引
+  type: 'HD' | 'Imported_PrivateKey'; //账户类型
+  keyringId?: string;//密钥环ID，HD:主密钥环 ID；Imported_PrivateKey:独立私钥账户 ID
+}
+
+export interface Keyring {
+  id: string;//密钥环ID
+  name: string;//密钥环名称
+  encryptedMnemonic: string;//加密后的助记词
+  isPrimary: boolean; // 核心区分：是否是自己钱包最初创建的  true:是  false:否
+  accounts: WalletAccount[];//账户列表
 }
 //钱包状态
 export interface WalletState {
   isLocked: boolean;
   isConnected: boolean;
-  accounts: WalletAccount[];
-  currentAccount: WalletAccount | null;
-  mnemonic: string | null;
-  password: string | null;
+  currentAccount: WalletAccount | null;//当前账户
+  keyrings: Keyring[];//密钥环列表
+  importedAccounts: WalletAccount[];//独立的私钥账户列表
+  mnemonic: string | null;//助记词
+  password: string | null;//钱包密码
   currentNetwork: Network;
   networks: Network[];
-  tokens: Token[];
+  tokens: Token[];//代币列表
 }
 //网络
 export interface Network {

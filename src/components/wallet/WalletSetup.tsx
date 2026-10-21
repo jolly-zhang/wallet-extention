@@ -123,9 +123,10 @@ export const WalletSetup = () => {
         title: "私钥导入成功！"
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "导入失败";
       toast({
         title: "导入失败",
-        description: "私钥无效或其他错误",
+        description: message,
         variant: "destructive"
       });
     } finally {

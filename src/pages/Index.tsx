@@ -4,12 +4,11 @@ import { WalletUnlock } from '@/components/wallet/WalletUnlock';
 import { useWalletStore } from '@/stores/walletStore';
 
 const Index = () => {
-  const { accounts, isLocked } = useWalletStore();
-  console.log(accounts);
-  
-  
+  const { keyrings, importedAccounts, isLocked } = useWalletStore();
+  const hasAccount = (keyrings ?? []).some(keyring => keyring.accounts.length > 0) || (importedAccounts ?? []).length > 0;
+
   // 如果没有账户，显示设置页面
-  if (accounts.length === 0) {
+  if (!hasAccount) {
     return <WalletSetup />;
   }
   

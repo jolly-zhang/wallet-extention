@@ -1,14 +1,12 @@
 // DApp Provider Service - 实现EIP-1102和EIP-747标准
 import { ethers } from 'ethers';
 import { useWalletStore } from '@/stores/walletStore';
-
 interface DappRequest {
   id: string;
   method: string;
   params: any[];
   origin: string;
 }
-
 interface WalletProvider {
   isMyWallet: boolean;
   request: (request: { method: string; params?: any[] }) => Promise<any>;

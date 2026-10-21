@@ -22,26 +22,29 @@
  * - 使用 ethers.js 进行钱包操作和 RPC 交互
  */
 
-import { type Network, type Token, type WalletAccount, type WalletState, DEFAULT_NETWORKS } from '@/types/wallet';
+import { type Network, type Token, type WalletAccount, type Keyring, type WalletState, DEFAULT_NETWORKS } from '@/types/wallet';
 import * as bip39 from 'bip39';
 import { AES, SHA256, enc } from 'crypto-js';
 import { ethers } from 'ethers';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
+import { v4 as uuidv4 } from 'uuid';
 //WalletStore继承WalletState
 interface WalletStore extends WalletState {
+  deriveHDAccount: (mnemonic: string, password: string) => Promise<{ newKeyring: Keyring; firstAccount: WalletAccount }>;
   // Wallet management
   createWallet: (password: string) => Promise<{ mnemonic: string; account: WalletAccount }>;
-  importWallet: (mnemonic: string, password: string) => Promise<WalletAccount>;
+  importWallet: (mnemonic: string, password: string) => Promise<{ mnemonic: string; account: WalletAccount }>;
   importPrivateKey: (privateKey: string, password: string, name?: string) => Promise<WalletAccount>;
   unlockWallet: (password: string) => boolean;
   lockWallet: () => void;
 
   // Account management
-  createAccount: (name?: string,password?: string) => WalletAccount;
+  createAccount: (keyringId: string, name?: string, password?: string) => WalletAccount;
   switchAccount: (address: string) => void;
   updateAccountName: (address: string, name: string) => void;
+  exportMnemonic: (account: WalletAccount, password: string) => string;
+  // exportPrivateKey: (address: string, password: string) => string;
 
   // Network management
   addNetwork: (network: Network) => void;
@@ -61,12 +64,14 @@ interface WalletStore extends WalletState {
   signMessage: (message: string) => Promise<string>;
   disconnect: () => void;
 }
+
 //钱包初始状态
 const initialState: WalletState = {
   isLocked: false,//钱包是否锁定
   isConnected: false,//钱包是否连接
-  accounts: [],//钱包账户列表
   currentAccount: null,//当前钱包账户
+  keyrings: [],//钱包密钥环列表
+  importedAccounts: [], // 独立的私钥账户
   mnemonic: null,//助记词
   password: null,//钱包密码
   currentNetwork: DEFAULT_NETWORKS[0],//当前网络
@@ -74,15 +79,19 @@ const initialState: WalletState = {
   tokens: []//代币列表
 };
 
+
+
 export const useWalletStore = create<WalletStore>()(
   // 使用 persist 让状态持久化
   persist(
     (set, get) => ({
       ...initialState,
-      // 创建钱包
-      createWallet: async (password: string) => {
-        // 1、生成助记词；bip39.generateMnemonic(256); // 24 个单词
-        const mnemonic = bip39.generateMnemonic();
+
+      deriveHDAccount: async (mnemonic: string, password: string) => {
+        const isPrimary = get().keyrings.length === 0; // 如果这是第一组，就是主钱包
+        const importedCount = get().keyrings.filter(k => !k.isPrimary).length;
+        const keyringName = isPrimary ? '我的主钱包' : `导入的钱包 ${importedCount + 1}`;
+
         // 2、生成种子
         const seedBuffer = await bip39.mnemonicToSeed(mnemonic);
         // 3、把二进制种子转成 Uint8Array
@@ -91,87 +100,127 @@ export const useWalletStore = create<WalletStore>()(
         const hdNode = ethers.HDNodeWallet.fromSeed(seed);
         // 5、根节点派生出指定索引的账户
         const wallet = hdNode.derivePath("m/44'/60'/0'/0/0");
-        // 6、构造账户对象，初始账户索引为 0
-        const account: WalletAccount = {
-          address: wallet.address,
-          privateKey: wallet.privateKey,
-          name: 'Account 1',
-          index: 0
-        };
-
-        // 7、加密助记词和私钥
+        // 6、加密助记词和私钥
         const encryptedMnemonic = AES.encrypt(mnemonic, password).toString();
         const encryptedPrivateKey = AES.encrypt(wallet.privateKey, password).toString();
+
+        // 7、构造账户对象，初始账户索引为 0
+        const keyringId = uuidv4();
+        const firstAccount: WalletAccount = {
+          address: wallet.address,
+          privateKey: encryptedPrivateKey,//加密后的私钥
+          name: 'Account 1',
+          index: 0,
+          type: 'HD',
+          keyringId: keyringId
+        };
+        const newKeyring: Keyring = {
+          id: keyringId,
+          name: keyringName,
+          encryptedMnemonic: encryptedMnemonic,//加密后的助记词
+          isPrimary,
+          accounts: [firstAccount]
+        };
+        return { newKeyring, firstAccount };
+      },
+      // 一、创建钱包
+      createWallet: async (password: string) => {
+        //判断是否有助记词；some找到第一个满足条件的元素就停止遍历
+        if (get().keyrings.some(k => k.isPrimary)) {
+          throw new Error("主钱包已存在，请使用导入功能");
+        }
+        // 1、生成助记词；bip39.generateMnemonic(256); // 24 个单词
+        const mnemonic = bip39.generateMnemonic();
+        const { newKeyring, firstAccount } = await get().deriveHDAccount(mnemonic, password);
 
         // 8、更新 store
         set({
           isLocked: false,
-          accounts: [{ ...account, privateKey: encryptedPrivateKey }],
-          currentAccount: account,
-          mnemonic: encryptedMnemonic,
-          password: SHA256(password).toString()
+          keyrings: [...get().keyrings, newKeyring],
+          currentAccount: firstAccount,
+          mnemonic: newKeyring.encryptedMnemonic,
+          password: SHA256(password).toString()//加密后的密码
         });
         // 9、返回助记词和账户
-        return { mnemonic, account };
+        return { mnemonic, account: firstAccount };
       },
 
-      // 通过助记词导入钱包
+      // 二、通过助记词导入钱包
       importWallet: async (mnemonic: string, password: string) => {
+        //1、验证助记词
         if (!bip39.validateMnemonic(mnemonic)) {
           throw new Error('Invalid mnemonic phrase');
         }
 
-        const seedBuffer = await bip39.mnemonicToSeed(mnemonic);
-        const seed = new Uint8Array(seedBuffer);
-        const hdNode = ethers.HDNodeWallet.fromSeed(seed);
-        const wallet = hdNode.derivePath("m/44'/60'/0'/0/0");
-
-        const account: WalletAccount = {
-          address: wallet.address,
-          privateKey: wallet.privateKey,
-          name: 'Account 1',
-          index: 0
-        };
-
-        const encryptedMnemonic = AES.encrypt(mnemonic, password).toString();
-        const encryptedPrivateKey = AES.encrypt(wallet.privateKey, password).toString();
-
+        //2、查看是否已经有账户在钱包里
+        const testWallet = ethers.HDNodeWallet.fromSeed(new Uint8Array(bip39.mnemonicToSeedSync(mnemonic))).derivePath("m/44'/60'/0'/0/0");
+        const allAddresses = [
+          ...get().keyrings.flatMap(k => k.accounts.map(a => a.address.toLowerCase())),
+          ...get().importedAccounts.map(a => a.address.toLowerCase())
+        ];
+        if (allAddresses.includes(testWallet.address.toLowerCase())) {
+          throw new Error("该助记词对应的账户已存在于钱包中！");
+        }
+        const existingPassword = get().password;
+        if (existingPassword && existingPassword !== SHA256(password).toString()) {
+          throw new Error('密码错误');
+        }
+        const { newKeyring, firstAccount } = await get().deriveHDAccount(mnemonic, password);
         set({
           isLocked: false,
-          accounts: [{ ...account, privateKey: encryptedPrivateKey }],
-          currentAccount: account,
-          mnemonic: encryptedMnemonic,
-          password: SHA256(password).toString()
+          keyrings: [...get().keyrings, newKeyring],
+          currentAccount: firstAccount,
+          mnemonic: get().mnemonic ?? newKeyring.encryptedMnemonic,
+          password: existingPassword || SHA256(password).toString()
         });
 
-        return account;
+        return { mnemonic, account: firstAccount };
       },
-      // 通过私钥导入钱包
-      importPrivateKey: async (privateKey: string, password: string, name = 'Imported Account') => {
+
+      // 三、通过私钥导入钱包
+      importPrivateKey: async (privateKey: string, password: string, name?: string) => {
+        const state = get();
         try {
-          const wallet = new ethers.Wallet(privateKey);
-          const existingAccounts = get().accounts;
+          //1、验证私钥
+          const pkClean = privateKey.trim().replace(/\s+/g, '');
+          const reg = /^(0x)?[0-9a-fA-F]{64}$/;
+          if (!reg.test(pkClean)) {
+            throw new Error('私钥格式错误');
+          }
+          //2、创建钱包
+          const wallet = new ethers.Wallet(pkClean);
+          //查看是否已经有账户在钱包里
+          const allAddresses = [
+            ...get().keyrings.flatMap(k => k.accounts.map(a => a.address.toLowerCase())),
+            ...get().importedAccounts.map(a => a.address.toLowerCase())
+          ];
+          if (allAddresses.includes(wallet.address.toLowerCase())) {
+            throw new Error("该账户已存在于钱包中！");
+          }
+          //计算账户索引
+          const accountIndex = state.importedAccounts.length
+            ? Math.max(...state.importedAccounts.map(a => a.index)) + 1
+            : 0;
+          const encryptedPrivateKey = AES.encrypt(wallet.privateKey, password).toString();
 
           const account: WalletAccount = {
             address: wallet.address,
-            privateKey: wallet.privateKey,
-            name,
-            index: existingAccounts.length
+            privateKey: encryptedPrivateKey,
+            name: name || `Account ${accountIndex + 1}`,
+            index: accountIndex,
+            type: 'Imported_PrivateKey',
           };
-
-          const encryptedPrivateKey = AES.encrypt(wallet.privateKey, password).toString();
-
           set(state => ({
-            accounts: [...state.accounts, { ...account, privateKey: encryptedPrivateKey }],
-            currentAccount: account,
+            importedAccounts: [...state.importedAccounts, account],
+            currentAccount: state.currentAccount || account,
             password: state.password || SHA256(password).toString()
           }));
-
           return account;
         } catch (error) {
-          throw new Error('Invalid private key');
+          throw new Error(error instanceof Error ? error.message : "导入失败");
         }
       },
+
       // 解锁钱包
       unlockWallet: (password: string) => {
         const state = get();
@@ -190,59 +239,112 @@ export const useWalletStore = create<WalletStore>()(
         set({ isLocked: true });
       },
       // 创建账户
-      createAccount: (name?: string,password?: string) => {
+      createAccount: (keyringId: string, name?: string, password?: string) => {
         const state = get();
-        //1 、检查助记词和密码是否存在
-        if (!state.mnemonic || !state.password) {
+        // 根据 keyringId 找到对应的 keyring
+        const keyring = state.keyrings.find(keyring => keyring.id === keyringId);
+        if (!keyring?.encryptedMnemonic || !password) {
           throw new Error('No wallet found');
         }
-        //2、解密助记词，密码是创建账户时输入的密码,state.password是加密过后的，解不开
-        const decryptedMnemonic = AES.decrypt(state.mnemonic, password).toString(enc.Utf8);
-        //3、助记词 → 种子；把人类可读的助记词（12/24 个单词）转成 64 字节的二进制种子
+        // 解密主钱包助记词
+        const decryptedMnemonic = AES.decrypt(keyring.encryptedMnemonic, password).toString(enc.Utf8);
+        if (!bip39.validateMnemonic(decryptedMnemonic)) {
+          throw new Error('密码错误或助记词无法解密');
+        }
+        // 把助记词转成种子
         const seedBuffer = bip39.mnemonicToSeedSync(decryptedMnemonic);
-        //4、把二进制种子转成 Uint8Array
+        // 把种子转成 Uint8Array
         const seed = new Uint8Array(seedBuffer);
-        //5、种子 → 根节点；种子创建 HD 钱包的根节点
+        // 创建 HD 钱包的根节点
         const hdNode = ethers.HDNodeWallet.fromSeed(seed);
-        //6、账户索引 = 最大索引+1
-        const accountIndex = state.accounts.length
-          ? Math.max(...state.accounts.map(a => a.index)) + 1
+        // 计算账户索引
+        const accountIndex = keyring.accounts.length
+          ? Math.max(...keyring.accounts.map(account => account.index)) + 1
           : 0;
-        //7、根节点 → 账户；根节点派生出指定索引的账户
+        // 根节点派生出指定索引的账户
         const wallet = hdNode.derivePath(`m/44'/60'/0'/0/${accountIndex}`);
-       
-        //8、加密私钥
+        // 加密私钥
         const encryptedPrivateKey = AES.encrypt(wallet.privateKey, password).toString();
-
-        //9、构造账户对象
-        const account: WalletAccount = {
+        // 构造账户对象
+        const newAccount: WalletAccount = {
           address: wallet.address,
-          privateKey: encryptedPrivateKey,//wallet.privateKey是明文，加密后存进 store
+          privateKey: encryptedPrivateKey,
           name: name || `Account ${accountIndex + 1}`,
-          index: accountIndex
+          index: accountIndex,
+          type: 'HD',
+          keyringId: keyring.id
         };
 
-        //10、存进 store 的是密文，不是明文；把新账户追加到 accounts；currentAccount 设为新账户
+        // 更新 store
         set(state => ({
-          accounts: [...state.accounts, account],
-          currentAccount: {...account}
+          keyrings: state.keyrings.map(k =>
+            k.id === keyring.id
+              ? { ...k, accounts: [...k.accounts, newAccount] }
+              : k
+          ),
+          currentAccount: newAccount
         }));
-        //11、返回的 account 里私钥是明文，调用方拿到后要小心处理
-        return account;
+        return newAccount;
       },
-
+      // 导出指定账户的助记词
+      exportMnemonic: (account: WalletAccount, password: string) => {
+        if (account.type === 'Imported_PrivateKey') {
+          throw new Error("此账户通过私钥导入，没有关联的助记词。请导出私钥进行备份。");
+        }
+        const keyring = get().keyrings.find(k => k.id === account.keyringId)
+          ?? get().keyrings.find(k => k.accounts.some(item => item.address === account.address));
+        if (!keyring) {
+          throw new Error("找不到该账户对应的助记词信息");
+        }
+        // 3. 解密助记词
+        const decryptedMnemonic = AES.decrypt(keyring.encryptedMnemonic, password).toString(enc.Utf8);
+        if (!bip39.validateMnemonic(decryptedMnemonic)) {
+          throw new Error('密码错误或助记词无法解密');
+        }
+        return decryptedMnemonic;
+      },
       // 切换账户，账户列表中切换
       switchAccount: (address: string) => {
         const state = get();
-        const account = state.accounts.find(acc => acc.address === address);
+        const account = [
+          ...(state.keyrings ?? []).flatMap(keyring => keyring.accounts),
+          ...(state.importedAccounts ?? [])
+        ].find(item => item.address === address);
         if (account) {
           set({ currentAccount: account });
         }
       },
+
+
+      // 导出指定账户的私钥，使用用户输入的明文密码解密
+      // exportPrivateKey: (address: string, password: string) => {
+      //   const state = get();
+      //   const account = [
+      //     ...(state.keyrings ?? []).flatMap(keyring => keyring.accounts),
+      //     ...(state.importedAccounts ?? [])
+      //   ].find(item => item.address === address);
+      //   if (!account) {
+      //     throw new Error('账户不存在');
+      //   }
+      //   if (/^0x[0-9a-fA-F]{64}$/.test(account.privateKey)) {
+      //     return account.privateKey;
+      //   }
+      //   const privateKey = AES.decrypt(account.privateKey, password).toString(enc.Utf8);
+      //   if (!privateKey) {
+      //     throw new Error('密码错误或私钥无法解密');
+      //   }
+      //   return privateKey;
+      // },
       // 更新账户名称
       updateAccountName: (address: string, name: string) => {
         set(state => ({
-          accounts: state.accounts.map(acc =>
+          keyrings: state.keyrings.map(keyring => ({
+            ...keyring,
+            accounts: keyring.accounts.map(acc =>
+              acc.address === address ? { ...acc, name } : acc
+            )
+          })),
+          importedAccounts: state.importedAccounts.map(acc =>
             acc.address === address ? { ...acc, name } : acc
           ),
           currentAccount: state.currentAccount?.address === address
@@ -316,6 +418,7 @@ export const useWalletStore = create<WalletStore>()(
       //   })
       //   return account
       // },
+      // 连接钱包
       connect: async (): Promise<WalletAccount> => {
         const state = await new Promise<WalletState | null>((resolve) => {
           chrome.storage.local.get('wallet-store', (result) => {
@@ -339,6 +442,7 @@ export const useWalletStore = create<WalletStore>()(
 
         return account;
       },
+      // 签名消息
       signMessage: async (message) => {
         const { state } = JSON.parse(localStorage.getItem("wallet-store"))
         console.log('钱包信息:', state);
@@ -372,7 +476,8 @@ export const useWalletStore = create<WalletStore>()(
         }
       },
       partialize: (state) => ({
-        accounts: state.accounts,
+        keyrings: state.keyrings,
+        importedAccounts: state.importedAccounts,
         mnemonic: state.mnemonic,
         password: state.password,
         networks: state.networks,
