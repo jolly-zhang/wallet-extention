@@ -1,5 +1,5 @@
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
@@ -28,7 +28,7 @@ export const WalletDashboard = () => {
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'networks' | 'tokens' | 'send'>('overview');
 
-  const { currentAccount, currentNetwork, lockWallet, tokens } = useWalletStore();
+  const { currentAccount, currentNetwork, networks, switchNetwork, lockWallet, tokens } = useWalletStore();
   console.log(currentAccount);
   console.log(currentNetwork);
   
@@ -135,9 +135,18 @@ export const WalletDashboard = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="text-[rgb(45,46,55)] text-sm">当前账户</div>
-                  <Badge variant="secondary" className="bg-white/20 text-[rgba(45,46,55,0.5)] border-white/20">
-                    {currentNetwork.name}
-                  </Badge>
+                  <Select value={currentNetwork.id} onValueChange={switchNetwork}>
+                    <SelectTrigger className="h-8 w-[180px] border-white/20 bg-white/20 text-[rgb(45,46,55)]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {networks.map(network => (
+                        <SelectItem key={network.id} value={network.id}>
+                          {network.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 
                 <div className="flex items-center gap-3 mb-4">

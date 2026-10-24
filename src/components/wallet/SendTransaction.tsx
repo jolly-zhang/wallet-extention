@@ -9,8 +9,8 @@ import { useWalletStore } from '@/stores/walletStore';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { useToast } from '@/hooks/use-toast';
 import { ethers } from 'ethers';
-import { Send, ArrowRight, AlertTriangle, CheckCircle } from 'lucide-react';
-import CryptoJS from 'crypto-js';
+import { Send, AlertTriangle, CheckCircle } from 'lucide-react';
+import { AES, enc } from 'crypto-js';
 
 interface SendForm {
   to: string;
@@ -20,7 +20,7 @@ interface SendForm {
   gasLimit?: string;
   gasPrice?: string;
 }
-
+//
 export const SendTransaction = () => {
   const [form, setForm] = useState<SendForm>({
     to: '',
@@ -38,16 +38,59 @@ export const SendTransaction = () => {
 
   const { 
     currentAccount, 
-    currentNetwork, 
+    currentNetwork,
+    networks,
+    keyrings,
+    importedAccounts,
     tokens, 
     getProvider, 
-    isValidPassword 
+    isValidPassword,
+    switchNetwork
   } = useWalletStore();
   const { ethBalance } = useWalletBalance();
   const { toast } = useToast();
 
   const selectedToken = tokens.find(token => token.address === form.tokenAddress);
-
+  const ownAccounts = [
+    ...(keyrings ?? []).flatMap(keyring => keyring.accounts),
+    ...(importedAccounts ?? [])
+  ].filter(account => account.address !== currentAccount?.address);
+  const ownAccountSelected = ownAccounts.some(account => account.address === form.to) ? form.to : undefined;
+  // 解密私钥
+  const resolvePrivateKey = (plainPassword: string) => {
+    const stored = [
+      ...(keyrings ?? []).flatMap(keyring => keyring.accounts),
+      ...(importedAccounts ?? [])
+    ].find(account => account.address === currentAccount?.address);
+    const cipher = stored?.privateKey || currentAccount?.privateKey || '';
+    if (/^0x[0-9a-fA-F]{64}$/.test(cipher)) {
+      return cipher;
+    }
+    // 解密私钥
+    const privateKey = AES.decrypt(cipher, plainPassword).toString(enc.Utf8);
+    if (!privateKey) {
+      throw new Error('密码错误或私钥无法解密');
+    }
+    return privateKey;
+  };
+  // 填充最大金额
+  const fillMaxAmount = async () => {
+    if (!currentAccount) return;
+    const provider = getProvider();
+    if (!provider) return;
+    try {
+      const balance = await provider.getBalance(currentAccount.address);
+      const feeData = await provider.getFeeData();
+      const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+      const fee = 21000n * gasPrice;
+      const maxValue = balance > fee ? balance - fee : 0n;
+      setForm(current => ({ ...current, amount: ethers.formatEther(maxValue) }));
+    } catch (error) {
+      console.error('Failed to calculate max amount:', error);
+      setForm(current => ({ ...current, amount: ethBalance }));
+    }
+  };
+  // 转账页面表单验证
   const validateForm = () => {
     if (!ethers.isAddress(form.to)) {
       toast({
@@ -65,6 +108,7 @@ export const SendTransaction = () => {
       return false;
     }
 
+    // 如果选择的是ETH，则判断余额是否足够
     if (selectedAsset === 'ETH') {
       if (parseFloat(form.amount) > parseFloat(ethBalance)) {
         toast({
@@ -74,9 +118,9 @@ export const SendTransaction = () => {
         });
         return false;
       }
-    } else if (selectedToken) {
+    } else if (selectedToken) { // 如果选择的是代币，则判断代币余额是否足够
       const tokenBalance = parseFloat(selectedToken.balance || '0');
-      if (selectedToken.type === 'ERC20' && parseFloat(form.amount) > tokenBalance) {
+      if (selectedToken.type === 'ERC20' && parseFloat(form.amount) > tokenBalance) { // 如果选择的是ERC20代币，则判断代币余额是否足够
         toast({
           title: "余额不足",
           description: `${selectedToken.symbol}余额不足`,
@@ -88,12 +132,12 @@ export const SendTransaction = () => {
 
     return true;
   };
-
+  // 发送交易转账按钮点击事件
   const handleSend = async () => {
     if (!validateForm()) return;
     setIsConfirmDialogOpen(true);
   };
-
+  // 确认执行交易转账事件
   const executeTransaction = async () => {
     if (!password) {
       toast({
@@ -111,34 +155,43 @@ export const SendTransaction = () => {
       });
       return;
     }
-
+    // 如果当前账户不存在，则返回
     if (!currentAccount) return;
-
+    // 设置发送中状态
     setIsSending(true);
     try {
       const provider = getProvider();
       if (!provider) {
         throw new Error('无法连接到网络');
       }
-
       // 解密私钥
-      const decryptedPrivateKey = CryptoJS.AES.decrypt(
-        currentAccount.privateKey,
-        password
-      ).toString(CryptoJS.enc.Utf8);
-
+      const decryptedPrivateKey = resolvePrivateKey(password);
+      // 创建钱包实例
       const wallet = new ethers.Wallet(decryptedPrivateKey, provider);
+      // 获取手续费数据
+      const feeData = await provider.getFeeData();
+      // 设置手续费字段
+      const feeFields: ethers.TransactionRequest = {};
+      if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+        feeFields.maxFeePerGas = feeData.maxFeePerGas;
+        feeFields.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+      } else if (feeData.gasPrice) {
+        feeFields.gasPrice = feeData.gasPrice;
+      }
 
       let tx;
 
       if (selectedAsset === 'ETH') {
-        // 发送ETH
-        tx = await wallet.sendTransaction({
+        // 创建交易请求
+        const txRequest: ethers.TransactionRequest = {
           to: form.to,
           value: ethers.parseEther(form.amount),
-          gasLimit: form.gasLimit || '21000',
-          gasPrice: ethers.parseUnits(form.gasPrice || '20', 'gwei')
-        });
+          ...feeFields
+        };
+        // 估算手续费
+        txRequest.gasLimit = await wallet.estimateGas(txRequest);
+        // 发送交易
+        tx = await wallet.sendTransaction(txRequest);
       } else if (selectedToken) {
         if (selectedToken.type === 'ERC20') {
           // 发送ERC20代币
@@ -148,10 +201,7 @@ export const SendTransaction = () => {
           const contract = new ethers.Contract(selectedToken.address, erc20Abi, wallet);
           const amount = ethers.parseUnits(form.amount, selectedToken.decimals);
           
-          tx = await contract.transfer(form.to, amount, {
-            gasLimit: form.gasLimit || '60000',
-            gasPrice: ethers.parseUnits(form.gasPrice || '20', 'gwei')
-          });
+          tx = await contract.transfer(form.to, amount, feeFields);
         } else if (selectedToken.type === 'ERC721') {
           // 发送NFT
           if (!form.tokenId) {
@@ -167,10 +217,7 @@ export const SendTransaction = () => {
             currentAccount.address,
             form.to,
             form.tokenId,
-            {
-              gasLimit: form.gasLimit || '100000',
-              gasPrice: ethers.parseUnits(form.gasPrice || '20', 'gwei')
-            }
+            feeFields
           );
         }
       }
@@ -218,12 +265,6 @@ export const SendTransaction = () => {
     setTxHash(null);
   };
 
-  const estimateGasFee = () => {
-    const gasLimit = parseInt(form.gasLimit || '21000');
-    const gasPrice = parseFloat(form.gasPrice || '20');
-    return ((gasLimit * gasPrice) / 1e9).toFixed(6);
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -266,6 +307,21 @@ export const SendTransaction = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>当前网络</Label>
+              <Select value={currentNetwork.id} onValueChange={switchNetwork}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择网络" />
+                </SelectTrigger>
+                <SelectContent>
+                  {networks.map(network => (
+                    <SelectItem key={network.id} value={network.id}>
+                      {network.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {/* 资产选择 */}
             <div className="space-y-2">
               <Label>选择资产</Label>
@@ -299,6 +355,27 @@ export const SendTransaction = () => {
                 )}
               </div>
             </div>
+
+            {ownAccounts.length > 0 && (
+              <div className="space-y-2">
+                <Label>转到我的账户</Label>
+                <Select
+                  value={ownAccountSelected}
+                  onValueChange={(address) => setForm({ ...form, to: address })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择钱包内账户" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ownAccounts.map(account => (
+                      <SelectItem key={account.address} value={account.address}>
+                        {account.name} ({account.address.slice(0, 6)}...{account.address.slice(-4)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* 接收地址 */}
             <div className="space-y-2">
@@ -335,7 +412,7 @@ export const SendTransaction = () => {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setForm({ ...form, amount: ethBalance })}
+                    onClick={fillMaxAmount}
                   >
                     全部
                   </Button>
@@ -360,35 +437,6 @@ export const SendTransaction = () => {
                 </p>
               )}
             </div>
-
-            {/* Gas设置 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="gasLimit">Gas Limit</Label>
-                <Input
-                  id="gasLimit"
-                  value={form.gasLimit}
-                  onChange={(e) => setForm({ ...form, gasLimit: e.target.value })}
-                  placeholder="21000"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="gasPrice">Gas Price (Gwei)</Label>
-                <Input
-                  id="gasPrice"
-                  value={form.gasPrice}
-                  onChange={(e) => setForm({ ...form, gasPrice: e.target.value })}
-                  placeholder="20"
-                />
-              </div>
-            </div>
-
-            {/* <div className="bg-muted p-3 rounded-lg">
-              <div className="flex justify-between text-sm">
-                <span>预估手续费:</span>
-                <span>{estimateGasFee()} {currentNetwork.symbol}</span>
-              </div>
-            </div> */}
 
             <Button 
               onClick={handleSend} 
@@ -436,7 +484,7 @@ export const SendTransaction = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">手续费:</span>
-                <span>{estimateGasFee()} {currentNetwork.symbol}</span>
+                <span>按当前网络自动估算</span>
               </div>
             </div>
 

@@ -7,14 +7,14 @@ export const useWalletBalance = () => {
   const { currentAccount, currentNetwork, getProvider, tokens, updateTokenBalance } = useWalletStore();
   const [ethBalance, setEthBalance] = useState<string>('0');
   const [isLoading, setIsLoading] = useState(false);
-
+  // 获取ETH余额
   const fetchEthBalance = async () => {
     if (!currentAccount || !currentNetwork) return;
 
     setIsLoading(true);
     try {
       const provider = getProvider();
-      if (!provider) return;
+      if (!provider) return;//如果provider不存在，则返回,必须判断 
 
       const balance = await provider.getBalance(currentAccount.address);
       setEthBalance(ethers.formatEther(balance));
@@ -24,7 +24,7 @@ export const useWalletBalance = () => {
       setIsLoading(false);
     }
   };
-
+  // 获取代币余额
   const fetchTokenBalance = async (token: Token) => {
     if (!currentAccount || !currentNetwork) return;
 
