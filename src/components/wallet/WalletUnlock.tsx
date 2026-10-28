@@ -7,7 +7,7 @@ import { useWalletStore } from '@/stores/walletStore';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Wallet, Lock } from 'lucide-react';
 
-export const WalletUnlock = () => {
+export const WalletUnlock = ({ description }: { description?: string }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +62,7 @@ export const WalletUnlock = () => {
             欢迎回来
           </h1>
           <p className="text-muted-foreground mt-2">
-            请输入密码解锁您的钱包
+            {description || '请输入密码解锁您的钱包'}
           </p>
         </div>
 

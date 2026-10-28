@@ -20,16 +20,21 @@
 window.addEventListener("message", (event) => {
   console.log("收到来自 injected-helper 的消息：", event);
   if (
+    //① 来源过滤：必须来自当前 window，不能是 iframe
     event.source !== window ||
+    //② 数据过滤：必须有有效数据，包含必要字段
     !event.data ||
+    //③ 来源过滤：必须来自 injected-helper，不能是其他来源
     event.data.from !== "injected-helper" ||
+    //④ 数据过滤：必须有有效类型和请求ID
     !event.data.type ||
+    //⑤ 数据过滤：必须有有效请求ID
     !event.data.requestId
   ) {
     return
   }
 
-  // 转发消息到background
+  // chrome.runtime.connect / sendMessage 把页面请求转发过去，也监听 background 返回的结果。
   chrome.runtime.sendMessage(
     {
       type: event.data.type,
@@ -39,7 +44,7 @@ window.addEventListener("message", (event) => {
     (response) => {
       console.log("收到来自 background 的响应：", response)
       if (chrome.runtime.lastError) {
-        console.error("转发消息到background失败：", chrome.runtime.lastError)
+        console.error("转发消息到background失败:", chrome.runtime.lastError)
          window.postMessage({
           from: 'message-bridge',
           requestId: event.data.requestId,
@@ -48,11 +53,16 @@ window.addEventListener("message", (event) => {
          }, window.location.origin)
          return
       }
+
+      const error = response?.data?.error
+      // 转发结果消息到injected-helper。拒绝连接时要让网页侧的 Promise 失败，RainbowKit 才会退出等待
       window.postMessage({
         from: 'message-bridge',
         requestId: event.data.requestId,
-        success: true,
-        data: response.data
+        success: !error && !!response,
+        data: response?.data,
+        error: error || (response ? undefined : '扩展没有响应'),
+        code: response?.data?.code
       }, "*")
     }
   )

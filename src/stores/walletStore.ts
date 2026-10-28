@@ -484,7 +484,9 @@ export const useWalletStore = create<WalletStore>()(
         tokens: state.tokens,
         currentNetwork: state.currentNetwork,
         currentAccount: state.currentAccount,
-        isConnected: state.isConnected
+        isConnected: state.isConnected,
+        // 锁定状态要跨弹窗共享，确认连接窗口才能判断该进解锁页还是确认页
+        isLocked: state.isLocked
       })
     }
   )

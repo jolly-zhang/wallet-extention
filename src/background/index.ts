@@ -1,4 +1,6 @@
 import { useWalletStore } from '../stores/walletStore';
+import { handleWalletConnect, handleWalletConnectDecision, handleWalletGetAccounts, handleWalletGetChainId, handleWalletSwitchChain, setupConnectPrompt } from './connect-prompt';
+import { handleWalletSendTransaction, handleWalletSendTransactionDecision, handleWalletSendTransactionGet, setupSendPrompt } from './send-prompt';
 import injectMyWallet from './injected-helper';
 import * as constant from './type_constant';
 
@@ -16,25 +18,44 @@ const setupMessageListener = () => {
   console.log('🔄 监听来自 message-bridge 的消息');
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("background 收到消息:", message.type, "来自标签页：", sender.tab?.id);
-    // 处理连接请求
+    // 处理连接请求：先打开确认窗口，等用户点确认或拒绝后再回复网页
     if (message.type === constant.WALLET_CONNECT) {
-      const walletStore = useWalletStore.getState()
-      try {
-        walletStore.connect().then(() => {
-          const account = walletStore.currentAccount
-          sendResponse({
-            data: { account }
-          })
-        }).catch((error) => {
-          sendResponse({
-            data: { error: error.message },
-          })
-        })
-      } catch (error) {
-        sendResponse({
-          data: { error: error instanceof Error ? error.message : '连接失败' },
-        })
-      }
+      handleWalletConnect(message, sender, sendResponse)
+      return true
+    }
+
+    if (message.type === constant.WALLET_CONNECT_DECISION) {
+      handleWalletConnectDecision(message, sender, sendResponse)
+      return true
+    }
+
+    if (message.type === constant.WALLET_GET_CHAIN_ID) {
+      handleWalletGetChainId(sendResponse)
+      return true
+    }
+
+    if (message.type === constant.WALLET_GET_ACCOUNTS) {
+      handleWalletGetAccounts(sendResponse)
+      return true
+    }
+
+    if (message.type === constant.WALLET_SWITCH_CHAIN) {
+      handleWalletSwitchChain(message, sendResponse)
+      return true
+    }
+
+    if (message.type === constant.WALLET_SEND_TRANSACTION) {
+      handleWalletSendTransaction(message, sender, sendResponse)
+      return true
+    }
+
+    if (message.type === constant.WALLET_SEND_TRANSACTION_GET) {
+      handleWalletSendTransactionGet(message, sender, sendResponse)
+      return true
+    }
+
+    if (message.type === constant.WALLET_SEND_TRANSACTION_DECISION) {
+      handleWalletSendTransactionDecision(message, sender, sendResponse)
       return true
     }
 
@@ -115,6 +136,26 @@ const setupScriptInjection = () => {
     }
   })
 
+  const injectIntoTab = (tabId: number, url?: string) => {
+    if (!url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: injectMyWallet
+    }, () => {
+      if (chrome.runtime.lastError) {
+        console.error("❌ Background script: 注入失败", chrome.runtime.lastError)
+      }
+    })
+  }
+
+  // 扩展重载后，给已经打开的网页补上最新的 provider
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach((tab) => {
+      if (tab.id) injectIntoTab(tab.id, tab.url)
+    })
+  })
+
   // 当标签页激活时也注入（备用机制）
   chrome.tabs.onActivated.addListener((e) => {
     chrome.tabs.get(e.tabId, (tab) => {
@@ -140,6 +181,8 @@ const setupScriptInjection = () => {
 initWallet()
 setupMessageListener()
 setupScriptInjection()
+setupConnectPrompt()
+setupSendPrompt()
 
 // 监听扩展安装事件
 chrome.runtime.onInstalled.addListener((details) => {
